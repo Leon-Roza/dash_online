@@ -20,7 +20,7 @@ body {
   border: 1px solid #A56F4A;
   padding: 12px;
   width: 100%;
-  max-width: 680px;
+  max-width: 780px;
   min-height: 200px;
 }
 .header { display: flex; align-items: flex-start; gap: 12px; }
@@ -44,6 +44,18 @@ body {
 .clock-bar-bg { height: 6px; background: #2A1F18; margin-top: 6px; }
 .clock-bar-fg { height: 6px; background: #B0C94E; width: 0%; transition: width 0.3s; }
 
+.filtro-bar {
+  display: flex; align-items: center; gap: 8px;
+  margin: 8px 0; font-size: 11px;
+}
+.filtro-bar label { color: #C8C0B0; }
+.filtro-bar select {
+  background: #1C1410; color: #C8C0B0;
+  border: 1px solid #A56F4A; padding: 2px 6px;
+  font-family: Consolas, monospace; font-size: 11px;
+  outline: none;
+}
+
 .sep { height: 1px; background: #A56F4A; margin: 8px 0; }
 
 table { width: 100%; border-collapse: collapse; font-size: 11px; }
@@ -63,6 +75,8 @@ td:nth-child(3) { color: #C8C0B0; text-align: right; }
 .total-row td:nth-child(3) { color: #E0D8C0; text-align: right; }
 .total-sep td { padding: 0; }
 .total-sep hr { border: none; border-top: 1px solid #A56F4A; margin: 4px 0; }
+
+.hist-header { color: #E0D8C0; font-size: 12px; font-weight: bold; margin: 12px 0 4px; }
 
 .footer { color: #A56F4A; font-size: 10px; margin-top: 8px; }
 .empty { text-align: center; color: #9A8A78; padding: 20px; }
@@ -96,6 +110,19 @@ td:nth-child(3) { color: #C8C0B0; text-align: right; }
     <div class="clock-bar-bg"><div class="clock-bar-fg" id="barra"></div></div>
   </div>
 
+  <div class="filtro-bar">
+    <label for="dias">PERÍODO:</label>
+    <select id="dias">
+      <option value="1">1 dia</option>
+      <option value="2">2 dias</option>
+      <option value="3">3 dias</option>
+      <option value="5">5 dias</option>
+      <option value="7">7 dias</option>
+      <option value="15">15 dias</option>
+      <option value="30">30 dias</option>
+    </select>
+  </div>
+
   <div class="sep"></div>
 
   <table id="tabela">
@@ -105,16 +132,29 @@ td:nth-child(3) { color: #C8C0B0; text-align: right; }
     <tbody id="tbody"></tbody>
   </table>
 
+  <div id="historico">
+    <div class="hist-header">HISTÓRICO POR DIA</div>
+    <table id="hist-tabela">
+      <thead><tr>
+        <th>Data</th><th>Entr.</th><th>Lucro</th><th>Prej.</th><th>Custos</th><th>Líquido</th><th>Result.</th>
+      </tr></thead>
+      <tbody id="histBody"></tbody>
+    </table>
+  </div>
+
   <div class="footer" id="footer"></div>
 </div>
 
 <script>
-const $hora = document.getElementById('hora');
-const $seg  = document.getElementById('seg');
-const $barra = document.getElementById('barra');
-const $ts   = document.getElementById('ts');
-const $tbody = document.getElementById('tbody');
+const $hora   = document.getElementById('hora');
+const $seg    = document.getElementById('seg');
+const $barra  = document.getElementById('barra');
+const $ts     = document.getElementById('ts');
+const $tbody  = document.getElementById('tbody');
 const $footer = document.getElementById('footer');
+const $dias   = document.getElementById('dias');
+const $historico  = document.getElementById('historico');
+const $histBody   = document.getElementById('histBody');
 
 function atualizarRelogio() {
   const now = new Date();
@@ -135,12 +175,13 @@ function atualizarRelogio() {
 
 function format(val) { return val.toFixed(2); }
 function gpCls(val) { return val >= 0 ? 'gp' : 'gl'; }
-function gpTxt(val) { return val >= 0 ? format(val) : format(val); }
+function gpTxt(val) { return val.toFixed(2); }
 
 function renderTabela(data) {
   if (!data || !data.robos || data.robos.length === 0) {
     $tbody.innerHTML = '<tr><td colspan="8" class="empty">Sem dados.</td></tr>';
     $footer.textContent = '';
+    $historico.style.display = 'none';
     return;
   }
 
@@ -181,6 +222,51 @@ function renderTabela(data) {
   $tbody.innerHTML = html;
   if (data.ts) $ts.textContent = data.ts;
   $footer.textContent = robos.length + ' robô(s) monitorado(s)';
+
+  renderHistorico(data.historico);
+}
+
+function renderHistorico(historico) {
+  const dias = parseInt($dias.value) || 1;
+  if (!historico || historico.length === 0 || dias <= 1) {
+    $historico.style.display = 'none';
+    return;
+  }
+  $historico.style.display = 'block';
+
+  const filtered = historico.slice(-dias);
+  let html = '';
+  for (const d of filtered) {
+    const liq = d.gp - d.gl;
+    const net = liq - d.c;
+    html += '<tr>' +
+      '<td>' + d.data + '</td>' +
+      '<td style="text-align:right">' + d.entries + '</td>' +
+      '<td class="gp">' + format(d.gp) + '</td>' +
+      '<td class="gl">' + format(d.gl) + '</td>' +
+      '<td class="cost">' + format(d.c) + '</td>' +
+      '<td class="' + gpCls(liq) + '">' + gpTxt(liq) + '</td>' +
+      '<td class="' + gpCls(net) + '">' + gpTxt(net) + '</td>' +
+      '</tr>';
+  }
+
+  let te = 0, tgp = 0, tgl = 0, tc = 0;
+  for (const d of filtered) { te += d.entries; tgp += d.gp; tgl += d.gl; tc += d.c; }
+  const tliq = tgp - tgl;
+  const tnet = tliq - tc;
+
+  html += '<tr class="total-sep"><td colspan="7"><hr></td></tr>';
+  html += '<tr class="total-row">' +
+    '<td>TOTAL</td>' +
+    '<td style="text-align:right">' + te + '</td>' +
+    '<td class="gp">' + format(tgp) + '</td>' +
+    '<td class="gl">' + format(tgl) + '</td>' +
+    '<td class="cost">' + format(tc) + '</td>' +
+    '<td class="' + gpCls(tliq) + '">' + gpTxt(tliq) + '</td>' +
+    '<td class="' + gpCls(tnet) + '">' + gpTxt(tnet) + '</td>' +
+    '</tr>';
+
+  $histBody.innerHTML = html;
 }
 
 async function carregar() {
@@ -191,8 +277,13 @@ async function carregar() {
     renderTabela(data);
   } catch(e) {
     $tbody.innerHTML = '<tr><td colspan="8" class="error">Falha ao carregar dados.</td></tr>';
+    $historico.style.display = 'none';
   }
 }
+
+$dias.addEventListener('change', function() {
+  carregar();
+});
 
 setInterval(atualizarRelogio, 200);
 setInterval(carregar, 5000);
