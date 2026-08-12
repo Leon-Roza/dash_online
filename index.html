@@ -113,6 +113,7 @@ td:nth-child(3) { color: #C8C0B0; text-align: right; }
   <div class="filtro-bar">
     <label for="dias">PERÍODO:</label>
     <select id="dias">
+      <option value="HOJE">Hoje</option>
       <option value="1">1 dia</option>
       <option value="2">2 dias</option>
       <option value="3">3 dias</option>
@@ -178,7 +179,12 @@ function gpCls(val) { return val >= 0 ? 'gp' : 'gl'; }
 function gpTxt(val) { return val.toFixed(2); }
 
 function renderTabela(data) {
-  if (!data || !data.robos || data.robos.length === 0) {
+  const filtro = $dias.value;
+  const isHoje = (filtro === 'HOJE');
+
+  const robos = isHoje ? (data.robos_hoje || []) : (data.robos || []);
+
+  if (!robos || robos.length === 0) {
     $tbody.innerHTML = '<tr><td colspan="8" class="empty">Sem dados.</td></tr>';
     $footer.textContent = '';
     $historico.style.display = 'none';
@@ -186,7 +192,6 @@ function renderTabela(data) {
   }
 
   let html = '';
-  const robos = data.robos;
 
   for (const r of robos) {
     const liq = r.gp - r.gl;
@@ -223,7 +228,11 @@ function renderTabela(data) {
   if (data.ts) $ts.textContent = data.ts;
   $footer.textContent = robos.length + ' robô(s) monitorado(s)';
 
-  renderHistorico(data.historico);
+  if (isHoje) {
+    $historico.style.display = 'none';
+  } else {
+    renderHistorico(data.historico);
+  }
 }
 
 function renderHistorico(historico) {
